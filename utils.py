@@ -1,16 +1,24 @@
+import os
+import subprocess
 from typing import Literal, Optional, Union
+
 import numpy as np
+
 import torch
+from torch import nn
 import torchvision.transforms as transforms
 
 from torchvision.datasets import ImageNet, CIFAR10, Caltech256
 from torchvision import transforms
 from torch.utils.data import DataLoader, Subset
 
+from models.hresnet import (
+    PoincareBottleneckBlock,
+    PoincareResNet,
+    PoincareResidualBlock,
+)
+from models.resnet import BottleneckBlock, ResNet, ResidualBlock
 
-from benchmark.models.hresnet import PoincareBottleneckBlock, PoincareResNet, PoincareResidualBlock
-from benchmark.models.resnet import BottleneckBlock, ResNet, ResidualBlock
-from torch import nn
 from hypll.manifolds.poincare_ball.manifold import PoincareBall
 
 
@@ -116,7 +124,9 @@ def make_resnet(
             {
                 "manifold": manifold,
                 "block": (
-                    PoincareBottleneckBlock if block_type == "bottleneck" else PoincareResidualBlock
+                    PoincareBottleneckBlock
+                    if block_type == "bottleneck"
+                    else PoincareResidualBlock
                 ),
             }
         )
@@ -124,7 +134,9 @@ def make_resnet(
     else:
         kwargs.update(
             {
-                "block": (BottleneckBlock if block_type == "bottleneck" else ResidualBlock),
+                "block": (
+                    BottleneckBlock if block_type == "bottleneck" else ResidualBlock
+                ),
             }
         )
         return ResNet(**kwargs)
@@ -133,3 +145,31 @@ def make_resnet(
 def parameter_count(model: nn.Module) -> int:
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     return sum([np.prod(p.size()) for p in model_parameters])
+
+
+def ensure_hypll_repo(ref: str, repo_dir: str = "hyperbolic_learning_library"):
+    repo_url = "git@github.com:tiberiuiancu/hyperbolic_learning_library.git"
+    cwd = os.getcwd()
+    target_path = os.path.join(cwd, repo_dir)
+
+    # Clone if not present
+    if not os.path.isdir(target_path):
+        subprocess.run(["git", "clone", repo_url, repo_dir], check=True)
+
+    # Fetch and checkout the specific commit
+    try:
+        subprocess.run(["git", "fetch"], cwd=target_path, check=True)
+        subprocess.run(["git", "checkout", ref], cwd=target_path, check=True)
+    except subprocess.CalledProcessError:
+        raise RuntimeError(f"Failed to checkout ref '{ref}' in {target_path}")
+
+    try:
+        subprocess.run(["python", "-m", "pip", "install", "-e", repo_dir])
+    except subprocess.CalledProcessError:
+        raise RuntimeError(f"Failed to install")
+
+    # Check import
+    try:
+        import hypll
+    except ImportError:
+        raise ImportError(f"Could not import hypll")

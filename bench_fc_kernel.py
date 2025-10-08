@@ -1,10 +1,14 @@
+from utils import ensure_hypll_repo
+
+ensure_hypll_repo("main")
+
 import os
 
 import torch
-from hypll.manifolds.poincare_ball.curvature import Curvature
-from hypll.manifolds.poincare_ball.manifold import PoincareBall
 import triton
 
+from hypll.manifolds.poincare_ball.curvature import Curvature
+from hypll.manifolds.poincare_ball.manifold import PoincareBall
 import hypll.nn as hnn
 from hypll.tensors.tangent_tensor import TangentTensor
 

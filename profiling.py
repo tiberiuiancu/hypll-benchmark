@@ -1,4 +1,9 @@
+from utils import ensure_hypll_repo
+
+ensure_hypll_repo("main")
+
 import os
+
 import torch
 import torch.nn as nn
 
@@ -6,16 +11,17 @@ import torch.profiler
 from torch.profiler import record_function
 from tqdm import tqdm
 
-from benchmark.models.mlp import MLP
-from benchmark.utils import make_resnet, get_dataset, parameter_count
+from models.mlp import MLP
+from utils import make_resnet, get_dataset, parameter_count
+
+from typing import Literal
+from tap import Tap
+
 from hypll.manifolds import Manifold
 from hypll.manifolds.poincare_ball.curvature import Curvature
 from hypll.manifolds.poincare_ball.manifold import PoincareBall
 from hypll.optim.adam import RiemannianAdam
 from hypll.tensors.tangent_tensor import TangentTensor
-
-from typing import Literal
-from tap import Tap
 
 MAX_NUM_OF_MEM_EVENTS_PER_SNAPSHOT = 100_000
 
@@ -34,11 +40,18 @@ def profile_training(
     compile_model: bool = False,
     compile_optimizer: bool = False,
 ):
-    torch.cuda.memory._record_memory_history(max_entries=MAX_NUM_OF_MEM_EVENTS_PER_SNAPSHOT)
+    torch.cuda.memory._record_memory_history(
+        max_entries=MAX_NUM_OF_MEM_EVENTS_PER_SNAPSHOT
+    )
 
     with torch.profiler.profile(
-        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
-        schedule=torch.profiler.schedule(warmup=warmup, active=active, wait=wait, skip_first=1),
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
+        schedule=torch.profiler.schedule(
+            warmup=warmup, active=active, wait=wait, skip_first=1
+        ),
         record_shapes=True,
         profile_memory=True,
         with_stack=True,
@@ -75,7 +88,6 @@ def profile_training(
 
             if manifold is not None:
                 with record_function("move_to_manifold"):
-                    # TODO: try to compile this
                     tangents = TangentTensor(data=inputs, man_dim=1, manifold=manifold)
                     inputs = manifold.expmap(tangents)
 
@@ -131,7 +143,9 @@ def get_model(args, in_size, out_size, manifold):
         ValueError: If the model type specified in args is invalid.
     """
     if args.model == "mlp":
-        return MLP(in_size=in_size, out_size=out_size, hdims=args.mlp_hdims, manifold=manifold)
+        return MLP(
+            in_size=in_size, out_size=out_size, hdims=args.mlp_hdims, manifold=manifold
+        )
     elif args.model.startswith("resnet"):
         resnet_config = args.model.removeprefix("resnet")
         # Dynamically determine the number of input channels based on the dataset
@@ -198,7 +212,9 @@ if __name__ == "__main__":
 
     # create manifold
     manifold = (
-        PoincareBall(c=Curvature(args.curvature), use_triton_backend=args.use_triton_backend)
+        PoincareBall(
+            c=Curvature(args.curvature), use_triton_backend=args.use_triton_backend
+        )
         if args.hyperbolic
         else None
     )
