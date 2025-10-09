@@ -156,6 +156,16 @@ def ensure_hypll_repo(ref: str, repo_dir: str = "hyperbolic_learning_library"):
     if not os.path.isdir(target_path):
         subprocess.run(["git", "clone", repo_url, repo_dir], check=True)
 
+        try:
+            subprocess.run(["python", "-m", "pip", "install", "-e", repo_dir])
+        except subprocess.CalledProcessError:
+            raise RuntimeError(f"Failed to install")
+        
+        try:
+            import hypll
+        except ImportError:
+            raise ImportError(f"Could not import hypll")
+
     # Fetch and checkout the specific commit
     try:
         subprocess.run(["git", "fetch"], cwd=target_path, check=True)
@@ -163,13 +173,3 @@ def ensure_hypll_repo(ref: str, repo_dir: str = "hyperbolic_learning_library"):
     except subprocess.CalledProcessError:
         raise RuntimeError(f"Failed to checkout ref '{ref}' in {target_path}")
 
-    try:
-        subprocess.run(["python", "-m", "pip", "install", "-e", repo_dir])
-    except subprocess.CalledProcessError:
-        raise RuntimeError(f"Failed to install")
-
-    # Check import
-    try:
-        import hypll
-    except ImportError:
-        raise ImportError(f"Could not import hypll")

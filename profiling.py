@@ -1,6 +1,6 @@
 from utils import ensure_hypll_repo
 
-ensure_hypll_repo("main")
+ensure_hypll_repo("ce6e048")
 
 import os
 

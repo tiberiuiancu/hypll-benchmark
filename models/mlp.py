@@ -11,6 +11,7 @@ class MLP(nn.Module):
         out_size: int = 10,
         hdims: list[int] | None = None,
         manifold: Manifold | None = None,
+        activation: bool = True,
         *args,
         **kwargs,
     ):
@@ -21,16 +22,37 @@ class MLP(nn.Module):
 
         layers = []
         for i in range(len(hdims) - 1):
-            layers.append(self.make_layer(hdims[i], hdims[i + 1], manifold=manifold))
+            layers.append(
+                self.make_layer(
+                    hdims[i], hdims[i + 1], manifold=manifold, activation=activation
+                )
+            )
         self.net = nn.Sequential(*layers)
 
-    def make_layer(self, in_dim: int, out_dim: int, manifold: Manifold | None):
+    def make_layer(
+        self,
+        in_dim: int,
+        out_dim: int,
+        manifold: Manifold | None,
+        activation: bool = True,
+        compile: bool = False,
+    ):
         if manifold is None:
-            return nn.Sequential(nn.Linear(in_dim, out_dim), nn.ReLU())
-        else:
-            return nn.Sequential(
-                hnn.HLinear(in_dim, out_dim, manifold=manifold), hnn.HReLU(manifold=manifold)
+            layers = [nn.Linear(in_dim, out_dim)] + (
+                [] if not activation else [nn.ReLU()]
             )
+        else:
+            layers = [
+                hnn.HLinear(in_dim, out_dim, manifold=manifold),
+            ] + (
+                []
+                if not activation
+                else [
+                    hnn.HReLU(manifold=manifold),
+                ]
+            )
+
+        return nn.Sequential(*layers)
 
     def forward(self, x):
         return self.net(x)
