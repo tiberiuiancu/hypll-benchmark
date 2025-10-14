@@ -17,3 +17,4 @@ torch_compile_debug/
 plots/
 docs/tex/out.nosync/
 hyperbolic_learning_library/
+.venv
