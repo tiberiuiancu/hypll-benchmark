@@ -1,6 +1,7 @@
 from utils import ensure_hypll_repo
 
-ensure_hypll_repo("ce6e048")
+ref = "relu"
+ensure_hypll_repo(ref)
 
 import os
 
@@ -38,7 +39,6 @@ def profile_training(
     manifold: Manifold | None = None,
     lr: float = 0.001,
     compile_model: bool = False,
-    compile_optimizer: bool = False,
 ):
     torch.cuda.memory._record_memory_history(
         max_entries=MAX_NUM_OF_MEM_EVENTS_PER_SNAPSHOT
@@ -67,14 +67,6 @@ def profile_training(
             else RiemannianAdam(model.parameters(), lr=lr)
         )
 
-        def opt():
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
-
-        @torch.compile
-        def opt_compiled():
-            opt()
-
         # first step is skipped
         prof.step()
 
@@ -102,10 +94,8 @@ def profile_training(
                 loss.backward()
 
             with record_function("optimizer"):
-                if compile_optimizer:
-                    opt_compiled()
-                else:
-                    opt()
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
 
             prof.step()
 
@@ -176,7 +166,6 @@ class ProfileArgs(Tap):
     dataset: Literal["imagenet", "cifar10", "caltech256"] = "cifar10"
     hyperbolic: bool = False
     compile_model: bool = False
-    compile_optimizer: bool = False
     batch_size: int = 128
     mlp_hdims: list[int] = [2**12]
     curvature: float = 0.1
@@ -226,9 +215,9 @@ if __name__ == "__main__":
     config_name = (
         ("h_" if args.hyperbolic else "")
         + ("c_" if args.compile_model else "")
-        + ("co_" if args.compile_optimizer else "")
         + (f"t_" if args.use_triton_backend else "")
-        + f"{args.model}"
+        + f"{args.model}_"
+        + f"{ref}"
     )
     profile_training(
         model=net,
@@ -236,7 +225,6 @@ if __name__ == "__main__":
         config=config_name,
         manifold=manifold,
         compile_model=args.compile_model,
-        compile_optimizer=args.compile_optimizer,
         active=args.active,
         warmup=args.warmup,
         wait=args.wait,

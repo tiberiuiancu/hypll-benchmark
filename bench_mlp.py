@@ -1,7 +1,7 @@
 from models.mlp import MLP
 from utils import ensure_hypll_repo
 
-ref = "triton"
+ref = "relu"
 ensure_hypll_repo(ref)
 
 import os

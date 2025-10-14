@@ -24,7 +24,12 @@ class MLP(nn.Module):
         for i in range(len(hdims) - 1):
             layers.append(
                 self.make_layer(
-                    hdims[i], hdims[i + 1], manifold=manifold, activation=activation
+                    hdims[i],
+                    hdims[i + 1],
+                    manifold=manifold,
+                    activation=(
+                        activation and i < len(hdims) - 2
+                    ),  # don't apply relu on the last layer
                 )
             )
         self.net = nn.Sequential(*layers)
@@ -35,7 +40,6 @@ class MLP(nn.Module):
         out_dim: int,
         manifold: Manifold | None,
         activation: bool = True,
-        compile: bool = False,
     ):
         if manifold is None:
             layers = [nn.Linear(in_dim, out_dim)] + (
