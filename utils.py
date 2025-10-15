@@ -160,7 +160,7 @@ def ensure_hypll_repo(ref: str, repo_dir: str = "hyperbolic_learning_library"):
             subprocess.run(["python", "-m", "pip", "install", "-e", repo_dir])
         except subprocess.CalledProcessError:
             raise RuntimeError(f"Failed to install")
-        
+
         try:
             import hypll
         except ImportError:
@@ -170,6 +170,6 @@ def ensure_hypll_repo(ref: str, repo_dir: str = "hyperbolic_learning_library"):
     try:
         subprocess.run(["git", "fetch"], cwd=target_path, check=True)
         subprocess.run(["git", "checkout", ref], cwd=target_path, check=True)
+        subprocess.run(["git", "pull"], cwd=target_path, check=True)
     except subprocess.CalledProcessError:
         raise RuntimeError(f"Failed to checkout ref '{ref}' in {target_path}")
-
