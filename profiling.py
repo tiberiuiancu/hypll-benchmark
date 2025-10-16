@@ -1,6 +1,6 @@
-from utils import ensure_hypll_repo
+from model_utils import ensure_hypll_repo
 
-ref = "relu"
+ref = os.getenv("REF", "main")
 ensure_hypll_repo(ref)
 
 import os
@@ -13,7 +13,7 @@ from torch.profiler import record_function
 from tqdm import tqdm
 
 from models.mlp import MLP
-from utils import make_resnet, get_dataset, parameter_count
+from model_utils import make_resnet, get_dataset, parameter_count
 
 from typing import Literal
 from tap import Tap

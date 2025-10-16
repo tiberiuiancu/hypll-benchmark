@@ -1,10 +1,12 @@
-from models.mlp import MLP
 from utils import ensure_hypll_repo
 
-ref = "relu"
+import os
+import argparse
+
+ref = os.getenv("REF", "main")
 ensure_hypll_repo(ref)
 
-import os
+from models.mlp import MLP
 
 import torch
 import triton
@@ -12,10 +14,9 @@ import triton
 from hypll.manifolds.poincare_ball.curvature import Curvature
 from hypll.manifolds.poincare_ball.manifold import PoincareBall
 from hypll.tensors.tangent_tensor import TangentTensor
-import argparse
 
 # configs for B, M, K
-default_b, default_m, default_k, default_d = 256, 3096, 3096, 0
+default_b, default_m, default_k, default_d = 256, 4096, 4096, 2
 activation = False
 b_sweep = [2**i for i in range(12)]
 m_sweep = [2**i for i in range(7, 15)]
@@ -41,8 +42,12 @@ configs = {
     },
 }
 
-# active_configs = ["torch", "triton", "euclidean"]
-active_configs = ["triton"]
+
+def get_active_configs():
+    return os.getenv("BENCH_CONFIGS", "torch triton euclidean").split(" ")
+
+
+active_configs = get_active_configs()
 
 
 def get_bench_kwargs():
@@ -108,13 +113,14 @@ def bench(B, M, K, D, c, provider):
 
     def run():
         x = torch.randn(B, K, device=device, dtype=dtype)
+        y = torch.randn(B, M, device=device, dtype=dtype)
         if provider != "euclidean":
             tangents = TangentTensor(data=x, manifold=manifold)
             x = manifold.expmap(tangents)
-        y = model(x)
+        y_hat = model(x)
         if provider != "euclidean":
-            y = y.tensor
-        y.sum().backward()
+            y_hat = y_hat.tensor
+        torch.nn.functional.cross_entropy(y_hat, y).backward()
 
     ms = triton.testing.do_bench(run)
     return ms
@@ -176,8 +182,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     activation = args.activation
 
-    # Run benchmarks and save plots
-    save_path = f"./plots/FC_bench_{ref}"
+    # Run benchmarks and save output
+    save_path = f".out/bench/FC_bench_{ref}"
     os.makedirs(save_path, exist_ok=True)
     run_kwargs = dict(show_plots=False, print_data=True, save_path=save_path)
     bench_d.run(**run_kwargs)

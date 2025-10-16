@@ -1,11 +1,11 @@
-from utils import ensure_hypll_repo
+from model_utils import ensure_hypll_repo
 
 ensure_hypll_repo("main")
 
 import torch
 import torch.nn as nn
 
-from utils import get_dataset
+from model_utils import get_dataset
 
 from typing import Literal
 from tap import Tap
