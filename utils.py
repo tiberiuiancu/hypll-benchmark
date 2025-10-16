@@ -170,6 +170,9 @@ def ensure_hypll_repo(ref: str, repo_dir: str = "hyperbolic_learning_library"):
     try:
         subprocess.run(["git", "fetch"], cwd=target_path, check=True)
         subprocess.run(["git", "checkout", ref], cwd=target_path, check=True)
-        subprocess.run(["git", "pull"], cwd=target_path, check=True)
+        try:
+            subprocess.run(["git", "pull"], cwd=target_path, check=True)
+        except subprocess.CalledProcessError:
+            print("Could not git pull; ref is likely not a branch")
     except subprocess.CalledProcessError:
         raise RuntimeError(f"Failed to checkout ref '{ref}' in {target_path}")
