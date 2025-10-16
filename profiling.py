@@ -1,9 +1,9 @@
-from model_utils import ensure_hypll_repo
+from utils import ensure_hypll_repo
+import os
 
 ref = os.getenv("REF", "main")
 ensure_hypll_repo(ref)
 
-import os
 
 import torch
 import torch.nn as nn
@@ -100,7 +100,7 @@ def profile_training(
             prof.step()
 
     # write trace and memory usage history
-    out_dir = f"traces/{config}"
+    out_dir = f".out/traces/{config}"
     os.makedirs(out_dir, exist_ok=True)
 
     prof.export_chrome_trace(f"{out_dir}/{config}_trace.json")

@@ -5,10 +5,12 @@ import pandas as pd
 refs = [
     "triton",
     "memory",
-    "logmap0",
+    # "logmap0",
     # "expmap0",
     "fused-relu-logmap0",
     "fused-op-in-tangent-space",
+    "fc-fwd-1d-grid",
+    "fc-bwd-1d-grid",
 ]
 
 dims = ["d", "b", "m", "k"]
