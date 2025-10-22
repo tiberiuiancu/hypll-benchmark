@@ -23,7 +23,7 @@ sweeps = {
     "b": [(2**i, default_k, default_m, default_d) for i in range(12)],
     "k": [(default_b, 2**i, default_m, default_d) for i in range(7, 15)],
     "m": [(default_b, default_k, 2**i, default_d) for i in range(7, 15)],
-    "d": [(default_b, default_k, default_m, i) for i in range(9)],
+    "d": [(default_b, default_k, default_m, i) for i in range(1, 9)],
 }
 
 
@@ -125,6 +125,7 @@ def bench(b, k, m, d, c, provider):
         if provider != "euclidean":
             y_hat = y_hat.tensor
         torch.nn.functional.cross_entropy(y_hat, y).backward()
+        torch.cuda.synchronize()
 
     ms = triton.testing.do_bench(run)
     return ms

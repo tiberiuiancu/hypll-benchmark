@@ -24,10 +24,13 @@ def ms_to_tflops(ms, b, k, m, d, hyperbolic: bool = True):
         expmap_bwd = 5 * b * m
         activation_bwd = logmap_bwd + expmap_bwd
 
-        return fc_fwd + fc_bwd + activation_fwd + activation_bwd
+        fc = fc_fwd + fc_bwd
+        activation = activation_fwd + activation_bwd
+
+        return fc + activation
 
     def flops_per_euc_layer(b, k, m):
-        return 2 * b * k * m + 2 * m
+        return 6 * b * k * m + 2 * b * m
 
     flops_per_layer = flops_per_hyp_layer if hyperbolic else flops_per_euc_layer
     total_flops = flops_per_layer(b, k, m) + flops_per_layer(b, m, m) * (d - 1)
@@ -39,7 +42,7 @@ def ms_to_tflops(ms, b, k, m, d, hyperbolic: bool = True):
 
 refs = [
     "triton",
-    # "memory",
+    "memory",
     # "logmap0",
     # "expmap0",
     "fused-relu-logmap0",
@@ -54,12 +57,14 @@ dfs = {}
 for dim in dims:
     dfs_dim = []
     for ref in refs:
-        df = pd.read_csv(f".out/bench/FC_bench_{ref}/poincare_fc_performance_{dim}.csv")
+        df = pd.read_csv(f".out/bench/FC_bench_{ref}/{dim}.csv")
+        df = df.astype(float)
         df.rename(
             columns={
                 "PyTorch": "HypLL",
                 "Triton fused-relu-logmap0": "Separate fused",
                 "Triton fc-bwd-1d-grid": "Ours",
+                "Triton triton": "Fused FC only",
                 "Triton memory": "Fused FC only",
                 "Euclidean": "Euclidean",
             },
@@ -70,7 +75,6 @@ for dim in dims:
     df_concat = pd.concat(dfs_dim, axis=1)
     df_concat = df_concat.loc[:, ~df_concat.columns.duplicated()]
     dfs[dim] = df_concat
-    print(dfs)
 
 
 def plot_dims(
@@ -100,7 +104,7 @@ def plot_dims(
 
         ax = axes[i]
         # Get columns to plot (skip the dimension columns)
-        b, k, m, d = df.columns[:4]
+        b, k, m, d = [df[c] for c in ["b", "k", "m", "d"]]
         columns = df.columns[4:]
         x = df[dim]
         lines = []
@@ -123,10 +127,12 @@ def plot_dims(
         ax.set_title(f"sweep {dim}", fontsize=title_size)
         if i % ncols == 0:
             if plot_flops:
-                ax.set_ylabel("TFLOPs")
+                ax.set_ylabel("TFLOP/s")
             else:
                 ax.set_ylabel("Duration (ms)")
         ax.grid(True)  # Turn on grid
+        if plot_flops:
+            ax.axhline(y=7.465, color="gray", linestyle=":", linewidth=1)
         if handles is None or labels is None:
             handles, labels = ax.get_legend_handles_labels()
 
@@ -150,4 +156,4 @@ def plot_dims(
     plt.close(fig)
 
 
-plot_dims(title_size=14, font_size=10, fig_width=6.75, fig_height=5)
+plot_dims(title_size=14, font_size=10, fig_width=6.75, fig_height=5, plot_flops=True)
