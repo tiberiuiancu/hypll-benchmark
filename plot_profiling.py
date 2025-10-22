@@ -1,6 +1,5 @@
 import pandas as pd
 import json
-import matplotlib.pyplot as plt
 
 
 def get_trace_df(path):
@@ -8,15 +7,15 @@ def get_trace_df(path):
     return pd.DataFrame(trace_events)
 
 
-def get_first_annotation_interval(d, name, gpu: bool = False):
+def get_annotation_interval(d, name, gpu: bool = False):
     cat = ("gpu_" if gpu else "") + "user_annotation"
-    d = d[(d["cat"] == cat) & (d["name"] == name)].sort_values("ts").iloc[0]
+    d = d[(d["cat"] == cat) & (d["name"] == name)].sort_values("ts").iloc[-1]
     start = d["ts"]
     end = start + d["dur"]
     return start, end
 
 
-def filter_df(d, name, cat, interval):
+def filter_df(d, name, cat, interval, pid=None):
     mask = d.index == d.index
     if name is not None:
         mask &= d["name"] == name
@@ -24,6 +23,8 @@ def filter_df(d, name, cat, interval):
         mask &= d["cat"] == cat
     if interval is not None:
         mask &= (d["ts"] >= interval[0]) & (d["ts"] + d["dur"] <= interval[1])
+    if pid is not None:
+        mask &= d["pid"] == 0
     return d[mask]
 
 
@@ -31,29 +32,38 @@ def kernel_duration_by_name(d, name):
     return d[d["name"].str.contains(name)]["dur"].sum()
 
 
-df = get_trace_df(".out/traces/h_mlp_main/h_mlp_main_trace.json")
-fwd_interval = get_first_annotation_interval(df, "forward_pass", True)
-opt_interval = get_first_annotation_interval(
-    df, "Optimizer.step#RiemannianAdam.step", True
-)
+config = "h_t_mlp_main"
+df = get_trace_df(f".out/traces/{config}/{config}_trace.json")
+fwd_interval = get_annotation_interval(df, "forward_pass", True)
+opt_interval = get_annotation_interval(df, "Optimizer.step#RiemannianAdam.step", True)
 bwd_interval = (fwd_interval[1], opt_interval[0])
 
 
 def compute_kernel_breakdown(interval):
     dfk = filter_df(df, None, "kernel", interval)
+    dfa = filter_df(df, None, None, interval, pid=0)
+    dfa = dfa[dfa["cat"] != "gpu_user_annotation"]
 
-    def dur_and_count(sub):
-        mask = dfk["name"].str.contains(sub)
+    def dur_and_count(sub: str, contains: bool = True):
+        if contains:
+            mask = dfk["name"].str.contains(sub)
+        else:
+            mask = dfk["name"].str.startswith(sub)
         return dfk[mask]["dur"].sum(), int(mask.sum())
 
     elementwise_d, elementwise_c = dur_and_count("elementwise")
     reduce_d, reduce_c = dur_and_count("reduce")
     gemm_d, gemm_c = dur_and_count("gemm")
-    idle_d = interval[1] - interval[0] - elementwise_d - reduce_d - gemm_d
-    return [elementwise_d, reduce_d, gemm_d, idle_d], [
+    ours_d, ours_c = dur_and_count("_", contains=False)
+    other_d = dfa["dur"].sum() - elementwise_d - reduce_d - gemm_d - ours_d
+    other_c = len(dfa) - elementwise_c - reduce_c - gemm_c - ours_c
+    idle_d = interval[1] - interval[0] - dfa["dur"].sum()
+    return [elementwise_d, reduce_d, gemm_d, ours_d, other_d, idle_d], [
         elementwise_c,
         reduce_c,
         gemm_c,
+        ours_c,
+        other_c,
         0,
     ]
 
@@ -67,7 +77,7 @@ def plot_kernel_breakdown(
     legend_size=10,
     annotation_size=9,
     split_at=1.0,  # if None -> no split; else split here
-    right_max=15.0,  # max x on the right pane (or overall if no split)
+    right_max=50.0,  # max x on the right pane (or overall if no split)
     ylabel="",
     title="Kernel Durations Per Training Step",
     xlabel="Duration (ms)",
@@ -76,8 +86,9 @@ def plot_kernel_breakdown(
     from matplotlib.gridspec import GridSpec
     from matplotlib.patches import Patch
 
-    labels = ["Element-\nwise", "Reduction", "GEMM", "Idle"]
-    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d3d3d3"]
+    # Define all possible categories
+    all_labels = ["Element-\nwise", "Reduction", "GEMM", "Ours", "Other", "Idle"]
+    all_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#d3d3d3"]
     positions = [1, 0]
     bar_height = 0.35
 
@@ -89,9 +100,28 @@ def plot_kernel_breakdown(
     totals = [sum(vals_fwd), sum(vals_bwd)]
     overall_max = max(totals + [float(right_max)])
 
+    # Filter out categories with zero duration in both forward and backward
+    non_zero_indices = []
+    filtered_labels = []
+    filtered_colors = []
+
+    threshold = 0.1
+
+    for i in range(len(all_labels)):
+        if vals_fwd[i] > threshold or vals_bwd[i] > threshold:
+            non_zero_indices.append(i)
+            filtered_labels.append(all_labels[i])
+            filtered_colors.append(all_colors[i])
+
+    # Filter the data to only include non-zero categories
+    filtered_vals_fwd = [vals_fwd[i] for i in non_zero_indices]
+    filtered_vals_bwd = [vals_bwd[i] for i in non_zero_indices]
+    filtered_cnts_fwd = [cnts_fwd[i] for i in non_zero_indices]
+    filtered_cnts_bwd = [cnts_bwd[i] for i in non_zero_indices]
+
     # ---- helpers ----
     def _bar(ax, y, left, length, color):
-        if length <= 0:
+        if length <= threshold:
             return None
         return ax.barh([y], [length], left=[left], height=bar_height, color=color)[0]
 
@@ -104,7 +134,8 @@ def plot_kernel_breakdown(
             str(txt),
             ha="center",
             va="center",
-            color=("black" if bg_color == "#d3d3d3" else "white"),
+            # color=("black" if bg_color == "#d3d3d3" else "white"),
+            color="black",
             fontsize=annotation_size,
             rotation=0,
         )
@@ -114,14 +145,32 @@ def plot_kernel_breakdown(
         # Single axis
         fig, ax = plt.subplots(figsize=(width, height))
         lefts = [0.0, 0.0]
-        for idx, (lbl, color) in enumerate(zip(labels, colors)):
-            for row, seg_len in enumerate([vals_fwd[idx], vals_bwd[idx]]):
+        prev_small = {}
+        for idx, (lbl, color) in enumerate(zip(filtered_labels, filtered_colors)):
+            for row, seg_len in enumerate(
+                [filtered_vals_fwd[idx], filtered_vals_bwd[idx]]
+            ):
+                small = seg_len < 5
                 L, R = lefts[row], lefts[row] + seg_len
-                _bar(ax, positions[row], L, seg_len, color)
-                # annotate at segment center
-                count = (cnts_fwd if row == 0 else cnts_bwd)[idx]
-                _annot(ax, L + seg_len / 2, positions[row], count, color)
-                lefts[row] = R
+                # Only plot if the segment length is above the threshold
+                if seg_len >= threshold:
+                    _bar(ax, positions[row], L, seg_len, color)
+                    # annotate at segment center
+                    count = (filtered_cnts_fwd if row == 0 else filtered_cnts_bwd)[idx]
+                    if small and prev_small.get(row, False):
+                        annot_offset = 0.25
+                        prev_small[row] = False
+                    else:
+                        annot_offset = 0
+                        prev_small[row] = small
+
+                    rowpos = positions[row] + (
+                        -annot_offset if row == 0 else annot_offset
+                    )
+                    _annot(ax, L + seg_len / 2, rowpos, count, color)
+                    lefts[row] = R
+                else:
+                    seg_len = 0  # Set to zero so annotation and lefts update correctly
 
         ax.set_xlim(0.0, overall_max)
         ax.set_yticks(positions)
@@ -135,15 +184,20 @@ def plot_kernel_breakdown(
         if ylabel:
             fig.supylabel(ylabel, fontsize=axis_label_size, x=0.06)
 
-        handles = [Patch(facecolor=c, label=l) for l, c in zip(labels, colors)]
-        fig.legend(
-            handles=handles,
-            fontsize=legend_size,
-            loc="lower center",
-            bbox_to_anchor=(0.5, -0.15),
-            ncol=len(handles),
-            frameon=False,
-        )
+        # Only create legend for non-zero categories
+        if filtered_labels:
+            handles = [
+                Patch(facecolor=c, label=l)
+                for l, c in zip(filtered_labels, filtered_colors)
+            ]
+            fig.legend(
+                handles=handles,
+                fontsize=legend_size,
+                loc="lower center",
+                bbox_to_anchor=(0.5, -0.15),
+                ncol=len(handles),
+                frameon=False,
+            )
         fig.subplots_adjust(left=0.14, right=0.98, top=0.90, bottom=0.18)
 
     else:
@@ -172,8 +226,10 @@ def plot_kernel_breakdown(
             return L, max(0.0, R - L)
 
         lefts = [0.0, 0.0]
-        for idx, (lbl, color) in enumerate(zip(labels, colors)):
-            for row, seg_len in enumerate([vals_fwd[idx], vals_bwd[idx]]):
+        for idx, (lbl, color) in enumerate(zip(filtered_labels, filtered_colors)):
+            for row, seg_len in enumerate(
+                [filtered_vals_fwd[idx], filtered_vals_bwd[idx]]
+            ):
                 L = lefts[row]
                 R = L + seg_len
                 lL, lLen = _intersect(L, R, *left_xlim)
@@ -182,7 +238,7 @@ def plot_kernel_breakdown(
                 _bar(axL, positions[row], lL, lLen, color)
                 _bar(axR, positions[row], rL, rLen, color)
 
-                count = (cnts_fwd if row == 0 else cnts_bwd)[idx]
+                count = (filtered_cnts_fwd if row == 0 else filtered_cnts_bwd)[idx]
                 if lLen > 0:
                     _annot(axL, lL + lLen / 2, positions[row], count, color)
                 elif rLen > 0:
@@ -202,15 +258,20 @@ def plot_kernel_breakdown(
         if ylabel:
             fig.supylabel(ylabel, fontsize=axis_label_size, x=0.06)
 
-        handles = [Patch(facecolor=c, label=l) for l, c in zip(labels, colors)]
-        fig.legend(
-            handles=handles,
-            fontsize=legend_size,
-            loc="lower center",
-            bbox_to_anchor=(0.5, 0.85),
-            ncol=len(handles),
-            frameon=False,
-        )
+        # Only create legend for non-zero categories
+        if filtered_labels:
+            handles = [
+                Patch(facecolor=c, label=l)
+                for l, c in zip(filtered_labels, filtered_colors)
+            ]
+            fig.legend(
+                handles=handles,
+                fontsize=legend_size,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 0.85),
+                ncol=len(handles),
+                frameon=False,
+            )
         fig.subplots_adjust(left=0.14, right=0.98, top=0.88, bottom=0.18, wspace=0.0)
 
     fig.savefig(".out/plots/kernels_fwd_bwd.pdf", bbox_inches="tight")
@@ -226,5 +287,5 @@ plot_kernel_breakdown(
     legend_size=8,
     annotation_size=7,
     split_at=None,
-    right_max=9,
+    right_max=30,
 )

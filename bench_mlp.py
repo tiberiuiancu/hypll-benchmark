@@ -18,10 +18,14 @@ from hypll.tensors.tangent_tensor import TangentTensor
 # configs for B, M, K
 default_b, default_m, default_k, default_d = 256, 4096, 4096, 2
 activation = False
-b_sweep = [2**i for i in range(12)]
-m_sweep = [2**i for i in range(7, 15)]
-k_sweep = [2**i for i in range(7, 15)]
-d_sweep = [i for i in range(10)]
+
+sweeps = {
+    "b": [(2**i, default_k, default_m, default_d) for i in range(12)],
+    "k": [(default_b, 2**i, default_m, default_d) for i in range(7, 15)],
+    "m": [(default_b, default_k, 2**i, default_d) for i in range(7, 15)],
+    "d": [(default_b, default_k, default_m, i) for i in range(9)],
+}
+
 
 configs = {
     "triton": {
@@ -63,9 +67,9 @@ def get_bench_kwargs():
 
 
 def build_model(
-    M,
-    K,
-    D,
+    k,
+    m,
+    d,
     c,
     dtype,
     device,
@@ -77,8 +81,8 @@ def build_model(
     if hyperbolic:
         manifold = PoincareBall(Curvature(c), use_triton_backend=use_triton_backend)
 
-    hdims = [M] * (int(D) - 1)
-    model = MLP(K, M, hdims, manifold, activation=activation).to(device, dtype)
+    hdims = [m] * (int(d) - 1)
+    model = MLP(k, m, hdims, manifold, activation=activation).to(device, dtype)
 
     if compiled:
         model.compile()
@@ -86,7 +90,7 @@ def build_model(
     return model, manifold
 
 
-def bench(B, M, K, D, c, provider):
+def bench(b, k, m, d, c, provider):
     device = "cuda"
     dtype = torch.float32
     torch.manual_seed(0)
@@ -99,9 +103,9 @@ def bench(B, M, K, D, c, provider):
     }[provider]
 
     model, manifold = build_model(
-        M,
-        K,
-        D,
+        k,
+        m,
+        d,
         c,
         dtype=torch.float32,
         device="cuda",
@@ -112,8 +116,8 @@ def bench(B, M, K, D, c, provider):
     model.train()
 
     def run():
-        x = torch.randn(B, K, device=device, dtype=dtype)
-        y = torch.randn(B, M, device=device, dtype=dtype)
+        x = torch.randn(b, k, device=device, dtype=dtype)
+        y = torch.randn(b, m, device=device, dtype=dtype)
         if provider != "euclidean":
             tangents = TangentTensor(data=x, manifold=manifold)
             x = manifold.expmap(tangents)
@@ -126,52 +130,17 @@ def bench(B, M, K, D, c, provider):
     return ms
 
 
-@triton.testing.perf_report(
-    triton.testing.Benchmark(
-        x_names=["batch_size"],
-        x_vals=b_sweep,
-        plot_name=f"poincare_fc_performance_b",
-        **get_bench_kwargs(),
+def get_bench(dim: str):
+    decorator = triton.testing.perf_report(
+        triton.testing.Benchmark(
+            x_vals=sweeps[dim],
+            x_names=["b", "k", "m", "d"],
+            plot_name=dim,
+            **get_bench_kwargs(),
+        )
     )
-)
-def bench_b(batch_size, provider: str, c: float):
-    return bench(batch_size, default_m, default_k, default_d, c, provider)
 
-
-@triton.testing.perf_report(
-    triton.testing.Benchmark(
-        x_names=["input_size"],
-        x_vals=m_sweep,
-        plot_name=f"poincare_fc_performance_m",
-        **get_bench_kwargs(),
-    )
-)
-def bench_m(input_size, provider: str, c: float):
-    return bench(default_b, input_size, default_k, default_d, c, provider)
-
-
-@triton.testing.perf_report(
-    triton.testing.Benchmark(
-        x_names=["hidden_size"],
-        x_vals=k_sweep,
-        plot_name=f"poincare_fc_performance_k",
-        **get_bench_kwargs(),
-    )
-)
-def bench_k(hidden_size, provider: str, c: float):
-    return bench(default_b, default_m, hidden_size, default_d, c, provider)
-
-
-@triton.testing.perf_report(
-    triton.testing.Benchmark(
-        x_names=["depth"],
-        x_vals=d_sweep,
-        plot_name=f"poincare_fc_performance_d",
-        **(get_bench_kwargs() | {"x_log": False}),
-    )
-)
-def bench_d(depth, provider: str, c: float):
-    return bench(default_b, default_m, default_k, depth, c, provider)
+    return decorator(bench)
 
 
 if __name__ == "__main__":
@@ -185,8 +154,9 @@ if __name__ == "__main__":
     # Run benchmarks and save output
     save_path = f".out/bench/FC_bench_{ref}"
     os.makedirs(save_path, exist_ok=True)
-    run_kwargs = dict(show_plots=False, print_data=True, save_path=save_path)
-    bench_d.run(**run_kwargs)
-    bench_m.run(**run_kwargs)
-    bench_b.run(**run_kwargs)
-    bench_k.run(**run_kwargs)
+    for dim in sweeps.keys():
+        get_bench(dim).run(
+            show_plots=False,
+            print_data=True,
+            save_path=save_path,
+        )
