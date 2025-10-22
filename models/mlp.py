@@ -28,7 +28,7 @@ class MLP(nn.Module):
                     hdims[i + 1],
                     manifold=manifold,
                     activation=(
-                        activation and i < len(hdims) - 2
+                        activation and (i < len(hdims) - 2 or len(hdims) == 2)
                     ),  # don't apply relu on the last layer
                 )
             )

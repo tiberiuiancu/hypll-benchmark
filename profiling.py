@@ -163,7 +163,7 @@ class ProfileArgs(Tap):
         "resnet152",
         "mlp",
     ]
-    dataset: Literal["imagenet", "cifar10", "caltech256"] = "cifar10"
+    dataset: Literal["imagenet", "cifar10", "caltech256", "random"] = "random"
     hyperbolic: bool = False
     compile_model: bool = False
     batch_size: int = 128

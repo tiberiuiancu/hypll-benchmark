@@ -30,7 +30,10 @@ for dim in dims:
 
 for dim in dims:
     df = dfs[dim]
-    ax = df.plot(x=0)
+    if dim != "d":
+        ax = df.plot(x=0, logx=True)
+    else:
+        ax = df.plot(x=0)
     fig = ax.get_figure()
     os.makedirs(".out/plots", exist_ok=True)
     fig.savefig(f".out/plots/{dim}.png")

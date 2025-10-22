@@ -8,7 +8,7 @@ import torchvision.transforms as transforms
 
 from torchvision.datasets import ImageNet, CIFAR10, Caltech256
 from torchvision import transforms
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, Dataset
 
 from models.hresnet import (
     PoincareBottleneckBlock,
@@ -20,11 +20,29 @@ from models.resnet import BottleneckBlock, ResNet, ResidualBlock
 from hypll.manifolds.poincare_ball.manifold import PoincareBall
 
 
+class RandomDataset(Dataset):
+    def __init__(
+        self, input_size: int = 4096, output_size: int = 4096, num_samples: int = 1000
+    ):
+        self.input_size = input_size
+        self.output_size = output_size
+        self.num_samples = num_samples
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        x = torch.randn(self.input_size)
+        y = torch.randn(self.output_size)
+        return x, y
+
+
 def get_dataset(
-    dataset: Literal["imagenet", "cifar10", "caltech256"],
+    dataset: Literal["imagenet", "cifar10", "caltech256", "random"],
     batch_size: int,
     flatten: bool = False,
     n_samples: int | None = None,
+    **dataset_kwargs,
 ) -> tuple[DataLoader, DataLoader] | DataLoader:
     t = []
 
@@ -48,7 +66,7 @@ def get_dataset(
             transforms.Grayscale(),  # Convert all datasets to single channel
             transforms.Normalize(mean=[0.45], std=[0.225]),
         ]
-    else:
+    elif dataset != "random":
         raise ValueError(f"Invalid dataset {dataset}")
 
     if flatten:
@@ -62,8 +80,11 @@ def get_dataset(
         dataset_class = CIFAR10
     elif dataset == "caltech256":
         dataset_class = Caltech256
+    elif dataset == "random":
+        dataset_class = RandomDataset
 
-    dataset_kwargs = dict(root="./data", transform=transform)
+    if dataset != "random":
+        dataset_kwargs |= dict(root="./data", transform=transform)
     if dataset in ["imagenet", "cifar10"]:
         dataset_kwargs |= dict(train=True)
     if dataset in ["cifar10"]:
