@@ -61,13 +61,23 @@ def compute_kernel_breakdown_for_df(df, fwd_interval, bwd_interval):
 
 def plot(
     configs,
+    title,
+    out_path,
     trace_base=".out/traces",
-    out_pdf=".out/plots/kernels_grouped_fwd_bwd.pdf",
     width=8,
     height_per_config=0.5,
-    title="GPU Kernel Durations grouped by forward / backward",
     xlabel="Duration (ms)",
-    threshold_ms=0.1,  # categories <= this (ms) treated as zero for filtering
+    threshold_ms=0.1,
+    # placement
+    titlepos=1,
+    xlabelpos=0,
+    legendpos=-0.5,
+    # fonts
+    titlesize: int = 10,
+    labelsize: int = 10,
+    xticksize: int = 9,
+    yticksize: int = 9,
+    legendsize: int = 9,
 ):
     """
     Plots grouped by phase: two groups (forward, backward). Inside each group,
@@ -78,7 +88,7 @@ def plot(
     from matplotlib.patches import Patch
 
     # categories and colors (kept same order)
-    all_labels = ["GEMM", "Reduction", "Element-\nwise", "Ours", "Other", "Idle"]
+    all_labels = ["GEMM", "Reduction", "Elementwise", "Ours", "Other", "Idle"]
     all_colors = ["#2ca02c", "#1f77b4", "#ff7f0e", "#d62728", "#ff64ef", "#d3d3d3"]
 
     # load data
@@ -143,8 +153,6 @@ def plot(
     bar_height = 0.8
     # create y positions
     y_positions = {"fwd": [], "bwd": []}
-    # top-down: fwd group above bwd group
-    # y coordinates: start from top = (n_cfg*2 + group_gap) / 2 and decrement
     total_rows = n_cfg * 2 + 1  # +1 gap
     start_y = total_rows / 2.0
     # forward group: y = start_y, start_y-1, ...
@@ -158,7 +166,8 @@ def plot(
         cur -= 1.0
 
     # plotting
-    fig, ax = plt.subplots(figsize=(width, max(2.0, height_per_config * n_cfg * 2)))
+    height = max(2.0, height_per_config * n_cfg * 2)
+    fig, ax = plt.subplots(figsize=(width, height))
     ax.set_xlim(0.0, xlim)
     ax.set_ylim(cur + 0.5, start_y + 0.5)
 
@@ -206,40 +215,56 @@ def plot(
         else:
             return "Euclidean"
 
+    is_large_plot = width > 5
     y_tick_positions = y_positions["fwd"] + y_positions["bwd"]
-    y_tick_labels = [f"{_map_cfg_name(cfg)} (fwd)" for cfg in configs] + [
-        f"{_map_cfg_name(cfg)} (bwd)" for cfg in configs
-    ]
+    if not is_large_plot and len(configs) == 1:
+        y_tick_labels = ["fwd", "bwd"]
+    else:
+        y_tick_labels = [f"{_map_cfg_name(cfg)} (fwd)" for cfg in configs] + [
+            f"{_map_cfg_name(cfg)} (bwd)" for cfg in configs
+        ]
     ax.set_yticks(y_tick_positions)
-    ax.set_yticklabels(y_tick_labels, fontsize=10, rotation=45)
+    ax.set_yticklabels(y_tick_labels, fontsize=yticksize, rotation=45)
 
-    ax.tick_params(axis="x", labelsize=9)
+    ax.tick_params(axis="x", labelsize=xticksize)
     if title:
-        fig.suptitle(title, fontsize=12, y=1)
+        fig.suptitle(title, fontsize=titlesize, y=titlepos)
     if xlabel:
-        fig.supxlabel(xlabel, fontsize=10, y=0)
+        fig.supxlabel(xlabel, fontsize=labelsize, y=xlabelpos)
 
     # legend
     handles = [
         Patch(facecolor=c, label=l) for l, c in zip(filtered_labels, filtered_colors)
     ]
+    ncol = len(handles) if is_large_plot else width // 1.5
     ax.legend(
         handles=handles,
-        fontsize=9,
+        fontsize=legendsize,
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.5),
-        ncol=len(handles),
+        bbox_to_anchor=(0.5, legendpos),
+        ncol=ncol,
         frameon=False,
     )
 
     fig.subplots_adjust(left=0.12, right=0.82, top=0.92, bottom=0.18)
-    fig.savefig(out_pdf, bbox_inches="tight")
+    fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
-    return out_pdf
+    return out_path
 
 
-# Example:
+plot(
+    ["h_mlp_main"],
+    title="HypLL FC Layer Kernel Duration",
+    out_path=".out/plots/kernels_hypll.pdf",
+    width=5,
+    legendpos=-0.6,
+)
+
 plot(
     ["h_mlp_main", "h_t_mlp_main", "mlp_main"],
-    out_pdf=".out/plots/kernels_grouped.pdf",
+    title="GPU Kernel Durations grouped by forward / backward",
+    out_path=".out/plots/kernels_grouped.pdf",
+    height_per_config=0.3,
+    legendpos=-0.45,
+    xlabelpos=-0.025,
 )

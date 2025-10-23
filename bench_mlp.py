@@ -16,13 +16,13 @@ from hypll.manifolds.poincare_ball.manifold import PoincareBall
 from hypll.tensors.tangent_tensor import TangentTensor
 
 # configs for B, M, K
-default_b, default_m, default_k, default_d = 256, 4096, 4096, 2
+default_b, default_m, default_k, default_d = 256, 4096, 4096, 3
 activation = False
 
 sweeps = {
     "b": [(2**i, default_k, default_m, default_d) for i in range(12)],
-    "k": [(default_b, 2**i, default_m, default_d) for i in range(7, 15)],
-    "m": [(default_b, default_k, 2**i, default_d) for i in range(7, 15)],
+    "k": [(default_b, 2**i, default_m, 1) for i in range(7, 15)],
+    "m": [(default_b, 2**i, 2**i, default_d) for i in range(7, 14)],
     "d": [(default_b, default_k, default_m, i) for i in range(1, 9)],
 }
 

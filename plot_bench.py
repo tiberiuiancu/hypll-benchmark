@@ -41,7 +41,7 @@ def ms_to_tflops(ms, b, k, m, d, hyperbolic: bool = True):
 
 
 refs = [
-    "triton",
+    # "triton",
     "memory",
     # "logmap0",
     # "expmap0",
@@ -49,9 +49,11 @@ refs = [
     # "fused-op-in-tangent-space",
     # "fc-fwd-1d-grid",
     "fc-bwd-1d-grid",
+    "main",
 ]
 
-dims = ["d", "b", "m", "k"]
+# dims = ["d", "b", "m", "k"]
+dims = ["d", "b", "m"]
 dfs = {}
 
 for dim in dims:
@@ -63,7 +65,8 @@ for dim in dims:
             columns={
                 "PyTorch": "HypLL",
                 "Triton fused-relu-logmap0": "Separate fused",
-                "Triton fc-bwd-1d-grid": "Ours",
+                "Triton fc-bwd-1d-grid": "Ours + bug",
+                "Triton main": "Ours",
                 "Triton triton": "Fused FC only",
                 "Triton memory": "Fused FC only",
                 "Euclidean": "Euclidean",
@@ -87,7 +90,7 @@ def plot_dims(
 ):
     plt.rcParams.update({"font.size": font_size})
     n = len(dims)
-    ncols = 2
+    ncols = 3
     nrows = (n + 1) // ncols
 
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(fig_width, fig_height))
