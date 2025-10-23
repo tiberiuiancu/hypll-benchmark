@@ -112,6 +112,7 @@ def plot_dims(
             y = df[col]
             if plot_flops:
                 y = ms_to_tflops(y, b, k, m, d, hyperbolic=(col != "Euclidean"))
+            linestyle = ":" if col == "Euclidean" else "-"
             (line,) = ax.plot(
                 x,
                 y,
@@ -120,6 +121,7 @@ def plot_dims(
                 color=colors[idx % len(colors)],
                 linewidth=2,
                 markersize=6,
+                linestyle=linestyle,
             )
             lines.append(line)
         if dim != "d":
@@ -133,6 +135,7 @@ def plot_dims(
         ax.grid(True)  # Turn on grid
         if plot_flops:
             ax.axhline(y=7.465, color="gray", linestyle=":", linewidth=1)
+            ax.set_ylim(top=8)
         if handles is None or labels is None:
             handles, labels = ax.get_legend_handles_labels()
 

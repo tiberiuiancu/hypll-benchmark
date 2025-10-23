@@ -125,7 +125,7 @@ def plot_kernel_breakdown(
             return None
         return ax.barh([y], [length], left=[left], height=bar_height, color=color)[0]
 
-    def _annot(ax, x_center, y, txt, bg_color):
+    def _annot(ax, x_center, y, txt, color):
         if txt <= 0:
             return
         ax.text(
@@ -134,8 +134,7 @@ def plot_kernel_breakdown(
             str(txt),
             ha="center",
             va="center",
-            # color=("black" if bg_color == "#d3d3d3" else "white"),
-            color="black",
+            color=color,
             fontsize=annotation_size,
             rotation=0,
         )
@@ -159,15 +158,17 @@ def plot_kernel_breakdown(
                     count = (filtered_cnts_fwd if row == 0 else filtered_cnts_bwd)[idx]
                     if small and prev_small.get(row, False):
                         annot_offset = 0.25
+                        annot_color = "black"
                         prev_small[row] = False
                     else:
                         annot_offset = 0
+                        annot_color = "white"
                         prev_small[row] = small
 
                     rowpos = positions[row] + (
                         -annot_offset if row == 0 else annot_offset
                     )
-                    _annot(ax, L + seg_len / 2, rowpos, count, color)
+                    _annot(ax, L + seg_len / 2, rowpos, count, annot_color)
                     lefts[row] = R
                 else:
                     seg_len = 0  # Set to zero so annotation and lefts update correctly
