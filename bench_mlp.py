@@ -153,6 +153,7 @@ if __name__ == "__main__":
     activation = args.activation
 
     # Run benchmarks and save output
+    ref = ref.removeprefix("config/")
     save_path = f".out/bench/FC_bench_{ref}"
     os.makedirs(save_path, exist_ok=True)
     for dim in sweeps.keys():

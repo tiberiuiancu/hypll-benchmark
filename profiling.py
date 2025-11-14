@@ -217,7 +217,7 @@ if __name__ == "__main__":
         + ("c_" if args.compile_model else "")
         + (f"t_" if args.use_triton_backend else "")
         + f"{args.model}_"
-        + f"{ref}"
+        + f"{ref.removeprefix('config/')}"
     )
     profile_training(
         model=net,

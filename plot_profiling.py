@@ -256,7 +256,6 @@ plot(
     ["h_mlp_main"],
     title="HypLL FC Layer Kernel Duration",
     out_path=".out/plots/kernels_hypll.pdf",
-    width=5,
     legendpos=-0.6,
 )
 

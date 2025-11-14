@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 
 
@@ -41,14 +42,8 @@ def ms_to_tflops(ms, b, k, m, d, hyperbolic: bool = True):
 
 
 refs = [
-    # "triton",
+    "triton",
     "memory",
-    # "logmap0",
-    # "expmap0",
-    "fused-relu-logmap0",
-    # "fused-op-in-tangent-space",
-    # "fc-fwd-1d-grid",
-    "fc-bwd-1d-grid",
     "main",
 ]
 
@@ -61,17 +56,17 @@ for dim in dims:
     for ref in refs:
         df = pd.read_csv(f".out/bench/FC_bench_{ref}/{dim}.csv")
         df = df.astype(float)
-        df.rename(
+        df = df.rename(
+            columns=lambda x: x.removeprefix("Triton ").removeprefix("config/")
+        ).rename(
             columns={
                 "PyTorch": "HypLL",
-                "Triton fused-relu-logmap0": "Separate fused",
-                "Triton fc-bwd-1d-grid": "Ours + bug",
-                "Triton main": "Ours",
-                "Triton triton": "Fused FC only",
-                "Triton memory": "Fused FC only",
                 "Euclidean": "Euclidean",
+                "main": "Ours",
+                "fused-relu-logmap0": "Separate fused",
+                "triton": "Fused FC only",
+                "memory": "Fused FC + memory optimization",
             },
-            inplace=True,
         )
         dfs_dim.append(df)
 
@@ -86,7 +81,7 @@ def plot_dims(
     fig_width: int = 10,
     fig_height: int = 6,
     plot_flops: bool = False,
-    output_path: str = ".out/plots/combined.pdf",
+    output_path: str = ".out/plots/flops.pdf",
 ):
     plt.rcParams.update({"font.size": font_size})
     n = len(dims)
@@ -100,6 +95,14 @@ def plot_dims(
     markers = ["o", "s", "D", "^", "v", "P", "*", "X", "<", ">"]
     colors = plt.get_cmap("tab10").colors  # 10 distinct colors
 
+    # Desired legend order
+    legend_order = [
+        "Euclidean",
+        "Ours",
+        "Fused FC + memory optimization",
+        "Fused FC only",
+        "HypLL",
+    ]
     handles, labels = None, None
 
     for i, dim in enumerate(dims):
@@ -129,7 +132,16 @@ def plot_dims(
             lines.append(line)
         if dim != "d":
             ax.set_xscale("log", base=2)
-        ax.set_title(f"sweep {dim}", fontsize=title_size)
+
+        if dim == "b":
+            xlabel = "batch size"
+        elif dim == "m":
+            xlabel = "hidden size"
+        elif dim == "d":
+            xlabel = "depth"
+        elif dim == "k":
+            xlabel = "input size"
+        ax.set_xlabel(xlabel, fontsize=10)
         if i % ncols == 0:
             if plot_flops:
                 ax.set_ylabel("TFLOP/s")
@@ -146,15 +158,36 @@ def plot_dims(
         fig.delaxes(axes[j])
 
     # Shared legend below all subplots
+    # Reorder handles and labels according to legend_order
+    label_to_handle = dict(zip(labels, handles))
+    ordered_labels = [lbl for lbl in legend_order if lbl in label_to_handle]
+    ordered_handles = [label_to_handle[lbl] for lbl in ordered_labels]
+
+    # Add legend entry for the theoretical limit line
+    theoretical_limit_line = Line2D(
+        [0],
+        [0],
+        color="gray",
+        linestyle=":",
+        linewidth=1,
+        label="GPU theoretical limit",
+    )
+
+    # Insert the theoretical limit at the end of the legend
+    ordered_handles.append(theoretical_limit_line)
+    ordered_labels.append("GPU theoretical limit")
+
     fig.legend(
-        handles,
-        labels,
+        ordered_handles,
+        ordered_labels,
         loc="lower center",
-        ncol=(len(labels) + 1) // 2,  # split legend into 2 rows
+        ncol=(len(ordered_labels) + 1) // 2,  # split legend into 2 rows
         bbox_to_anchor=(0.5, -0.08),
         fontsize=font_size,
         frameon=False,
     )
+
+    fig.suptitle("Parameter sweep FLOPS comparison", fontsize=title_size)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     fig.tight_layout(rect=[0, 0.05, 1, 1])  # leave space for legend
@@ -162,4 +195,4 @@ def plot_dims(
     plt.close(fig)
 
 
-plot_dims(title_size=14, font_size=10, fig_width=6.75, fig_height=5, plot_flops=True)
+plot_dims(title_size=10, font_size=10, fig_width=6.75, fig_height=3, plot_flops=True)
